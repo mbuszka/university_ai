@@ -152,7 +152,7 @@ object Main {
   }
 
   def main(args: Array[String]): Unit = {
-    val filename = "in-1.txt"
+    val filename = "in_1.txt"
     for (line <- Source.fromFile(filename).getLines) {
       one(line)
     }
