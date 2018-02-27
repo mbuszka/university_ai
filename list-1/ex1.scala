@@ -1,8 +1,6 @@
 import scala.collection.mutable.{ Map, HashMap, Queue }
 import scala.io.Source
 
-// TODO REFACTOR THIS SHIT
-
 trait Direction
 case object Up extends Direction
 case object Down extends Direction
@@ -154,7 +152,7 @@ object Main {
   }
 
   def main(args: Array[String]): Unit = {
-    val filename = "input_1.1.txt"
+    val filename = "in-1.txt"
     for (line <- Source.fromFile(filename).getLines) {
       one(line)
     }
