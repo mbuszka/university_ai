@@ -1,11 +1,9 @@
-from functools import reduce
-
 words = []
-with open('words_for_ai.txt') as f:
+with open('ex_2_words.txt') as f:
   words = { s.strip() for s in f.readlines() }
 
 text = []
-with open('pan_tadeusz_bez_spacji.txt') as f:
+with open('in_2.txt') as f:
   text = f.read()
 
 m = max([len(x) for x in words])
