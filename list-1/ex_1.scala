@@ -1,5 +1,5 @@
 import scala.collection.mutable.{ Map, HashMap, Queue }
-import scala.io.Source
+import scala.io.StdIn
 
 trait Direction
 case object Up extends Direction
@@ -152,8 +152,9 @@ object Main {
   }
 
   def main(args: Array[String]): Unit = {
-    val filename = "in_1.txt"
-    for (line <- Source.fromFile(filename).getLines) {
+    // val filename = "in_1.txt"
+    var line: String = null
+    while ({ line = StdIn.readLine; line != null }) {
       one(line)
     }
   }

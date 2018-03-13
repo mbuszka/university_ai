@@ -1,10 +1,10 @@
+import sys
+
 words = []
 with open('ex_2_words.txt') as f:
   words = { s.strip() for s in f.readlines() }
 
-text = []
-with open('in_2.txt') as f:
-  text = f.read()
+text = sys.stdin.read()
 
 m = max([len(x) for x in words])
 n = len(text)
