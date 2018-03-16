@@ -29,13 +29,16 @@ let bfs game state =
             | Some s ->
               let c' = move coord d in
               let p = Hashtbl.find paths coord in
-              if not (Hashtbl.mem paths c')
-              then Hashtbl.add paths c' (d :: p)
-              else ();
-              Queue.add c' waiting;
               if not (Coords.equal s.crates state.crates)
               then Moves.add s (d :: p) states
-              else states) s) in
+              else (
+                if not (Hashtbl.mem paths c')
+                then Hashtbl.add paths c' (d :: p)
+                else ();
+                Queue.add c' waiting;
+                states
+              )
+          ) s) in
       aux s'
   in
     Hashtbl.add paths state.guy [];
@@ -73,7 +76,7 @@ let search game init =
                 Hashtbl.add known state (List.append p path);
                 let ds = List.map (dist game.goals) (Coords.elements state.crates) in
                 let d = List.fold_left (fun a x -> a + x) 0 ds in
-                Heap.insert { key = d + (List.length p) + 1; value = state } q)) q') in
+                Heap.insert { key = d; value = state } q)) q') in
         aux q''
   in
     Hashtbl.add known init [];
