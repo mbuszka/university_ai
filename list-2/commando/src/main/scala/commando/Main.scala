@@ -35,7 +35,7 @@ trait Loader {
 object Main extends Loader {
   def main(args: Array[String]): Unit = {
     val game = loadInput
-    val search = Astar(game)
+    val search = if (args(0) == "bfs") Bfs(game) else Astar(game)
     val path = search.run
     path.foreach(print)
     println
