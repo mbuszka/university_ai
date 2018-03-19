@@ -1,19 +1,25 @@
-let
-  pkgs = import <nixpkgs> {};
-in
-  pkgs.stdenv.mkDerivation {
-    name = "none";
-    buildInputs = with pkgs; [
-      scala
+with import <nixpkgs> {};
+
+stdenv.mkDerivation
+{ name = "commando";
+  buildInputs =
+    [ scala
       sbt
-      python3
-    ] ++ (with python3.pkgs; [
+      jdk
+    ] ++ (with python3.pkgs;
+    [
+      python
+      pyaml
+      numpy
       pip
       pep8
-      pylint
+    ]) ++ (with ocaml-ng.ocamlPackages_4_05;
+    [
+      ocaml
+      merlin
+      findlib
     ]);
-    shellHook = ''
-      export EDITOR=vim
-      export VISUAL=code
-    '';
-  }
+  shellHook = ''
+    export PYTHONPATH=$HOME/.local/lib/python3.6/site-packages/:$PYTHONPATH
+  '';
+}
