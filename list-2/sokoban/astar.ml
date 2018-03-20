@@ -1,10 +1,10 @@
 open Grid
 
-type elem = { key: int; value: state }
+type elem = { key: int; dist: int; value: state }
 
 module Heap = Heap.Make (struct
   type t = elem
-  let compare x y = compare x.key y.key
+  let compare x y = let c = compare x.key y.key in if c == 0 then compare x.dist y.dist else c
 end)
 
 let find_min xs = List.fold_left (fun m x -> if x < m then x else m) (List.hd xs) xs
@@ -20,7 +20,7 @@ let astar game init_state =
     if Heap.isEmpty q
     then ()
     else
-      let { key = _; value = s } = Heap.findMin q in
+      let { key = _; dist = distance; value = s } = Heap.findMin q in
       let q' = Heap.deleteMin q in
       let p = Hashtbl.find known s in
       (* print_int (Hashtbl.length known); print_newline (); *)
@@ -38,12 +38,12 @@ let astar game init_state =
               else (
                 Hashtbl.add known state (d :: p);
                 let ds = List.map (dist game.goals) (Coords.elements state.crates) in
-                let d = List.fold_left (fun a x -> a + x) 0 ds in
-                Heap.insert { key = d + (List.length p) + 1; value = state } q)) q') in
+                let d = List.fold_left (fun a x -> if a < x then x else a) 0 ds in
+                Heap.insert { key = d + distance + 1; dist = distance + 1; value = state } q)) q') in
         aux q''
   in
     Hashtbl.add known init_state [];
-    aux (Heap.insert { key = 0; value = init_state } Heap.empty)
+    aux (Heap.insert { key = 0; dist = 0; value = init_state } Heap.empty)
 
 let main =
   let strings = read_input "zad_input.txt" in
