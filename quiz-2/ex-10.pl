@@ -1,4 +1,6 @@
-% Lengths, Starts, Pixels
+:- [
+  library(clpfd)
+].
 
 check(_, Bit, [], []) :- Bit = false.
 check(Idx, Bit, [S|SS], [L|LS]) :-
