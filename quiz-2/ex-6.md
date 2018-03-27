@@ -12,4 +12,4 @@
 
 3. Dzieci
 
-   `h(n) = odl do celu
+   `h(n) = odl do celu`
