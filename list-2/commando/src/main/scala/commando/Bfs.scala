@@ -13,8 +13,8 @@ case class Bfs(game: Game) extends Search {
   import Game.State
   def reduceStateSingle(init: State): (State, List[Dir]) = {
     def go(cnt: Int, state: State, path: List[Dir]): (State, List[Dir]) = {
-      if (cnt > 110) return (state, path)
-      if (state.size == 1) return (state, path)
+      if (cnt > 100) return (state, path)
+      if (state.size <= 2) return (state, path)
       val states = Dir.all.map { d => (game.move(state, d), d +: path) }
       val (nextS, nextP) = game.chooseBestOrRandom(states)
       return go(cnt + 1, nextS, nextP)
