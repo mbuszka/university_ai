@@ -3,7 +3,8 @@ with import <nixpkgs> {};
 stdenv.mkDerivation
 { name = "commando";
   buildInputs =
-    [ scala
+    [ swiProlog
+      scala
       sbt
       jdk
     ] ++ (with python3.pkgs;
@@ -16,6 +17,7 @@ stdenv.mkDerivation
     ]) ++ (with ocaml-ng.ocamlPackages_4_05;
     [
       ocaml
+      ocamlbuild
       merlin
       findlib
     ]);
