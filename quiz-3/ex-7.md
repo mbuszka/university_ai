@@ -5,6 +5,8 @@
   - najpierw generuję trochę stanów początkowych (np losowe sekwencje ruchów)
   - potem odpalam na nich local beam search - na trochę kroków
   - wybieram najlepszy i odpalam A*
+
+  Albo obcinamy kolejkę w A*
 3. algorytm ewolucyjny, w którym z czasem spada tempo mutacji
 4. zabraniamy powtarzania słabych genotypów (albo powtarzających się)
 5. Na przemian
