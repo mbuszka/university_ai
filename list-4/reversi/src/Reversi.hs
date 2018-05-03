@@ -1,128 +1,93 @@
 module Reversi where
 
-import           Data.List
+import           Data.Int
+import qualified Data.List as List
+import qualified Data.List.NonEmpty as NL
+import           Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.Map as Map
 import           Data.Map (Map)
-import           Data.Maybe
+import           Data.Maybe as Maybe
 import qualified Data.Set as Set
 import           Data.Set (Set)
+import qualified Data.Vector.Unboxed as Vec
 
-data Color = Black | White
-  deriving (Eq, Ord, Show)
+import Grid
 
-data Coord = C !Int !Int
-  deriving (Eq, Ord, Show)
-type Grid = Map Coord Color
-
-data Dir = N | NE | E | SE | S | SW | W | NW
-  deriving (Eq, Show)
-
-other :: Color -> Color
-other White = Black
-other Black = White
-
-showGrid :: Grid -> String
-showGrid g = let
-  p = [[pix (Map.lookup (C i j) g) | j <- [0..7]] | i <- [0..7]]
-  pix Nothing = '.'
-  pix (Just White) = 'W'
-  pix (Just Black) = 'B'
-  in unlines p
+type Ply = (Grid, NonEmpty Grid)
 
 dirs :: [Dir]
 dirs = [ N, NE, E, SE, S, SW, W, NW ]
 
-diff :: Dir -> Coord
-diff N  = C 1 0
-diff NE = C 1 1
-diff E  = C 0 1
-diff SE = C (-1) 1
-diff S  = C (-1) 0
-diff SW = C (-1) (-1)
-diff W  = C 0 (-1)
-diff NW = C 1 (-1)
+paths :: Coord -> Grid -> [[(Int, Color)]]
+paths c g = [path c d g | d <- dirs]
 
-{-# INLINE plus #-}
-plus :: Coord -> Coord -> Coord
-plus (C x y) (C dx dy) = C (x + dx) (y + dy)
-
-goodCoord :: Coord -> Bool
-goodCoord (C x y) = 0 <= x && x <= 7 && 0 <= y && y <= 7
-
--- neighbours :: Coord -> [Coord]
--- neighbours c = filter goodCoord $ fmap (plus c . diff) dirs
-
-paths :: Coord -> [(Dir, [Coord])]
-paths c = [(d, iterate (plus $ diff d) c) | d <- dirs]
-
-goodPath :: Grid -> Color -> [Coord] -> Set Coord
-goodPath g color (s:c:cs) =
-  if maybe False (/= color) (Map.lookup c g)
+goodPath :: Color -> [(Int, Color)] -> Set Int
+goodPath c [_] = Set.empty
+goodPath c [_, _] = Set.empty
+goodPath c (this:next:rest) =
+  if snd next == other c
      && sandwich
-  then Set.fromList $ s:c:toFlip
+  then Set.fromList $ map fst (this:next:toFlip)
   else Set.empty
   where
-    (toFlip, rest) = span (maybe False (/= color) . flip Map.lookup g) cs
-    sandwich = Just color == Map.lookup (head rest) g
+    (toFlip, tail) = span (\x -> snd x == other c) rest
+    sandwich = Just c == (fmap (snd . fst) . List.uncons $ tail)
 
-goodPos :: Grid -> Color -> Coord -> Set Coord
-goodPos g color c = if goodCoord c 
-  then foldr (Set.union . goodPath g color) Set.empty (fmap snd $ paths c)
-  else Set.empty
+goodPos :: Coord -> Color -> Grid -> Set Int
+goodPos coord color g =
+  foldr (Set.union . goodPath color) Set.empty (paths coord g)
 
 moves :: Grid -> Color -> [Grid]
 moves g c =
-  let coords = Set.fromList [C i j | i <- [0..7], j <- [0..7]] `Set.difference` Map.keysSet g
-      good = filter (not . Set.null) $ fmap (goodPos g c) $ Set.toList coords
-      grids = map (foldr (flip Map.insert c) g) good
+  let good = filter (not . Set.null) $ fmap (\coord -> goodPos coord c g) $ emptyTiles g
+      grids = map (changeTiles g c . Set.toList) good
   in grids
 
-initial :: Grid
-initial = Map.fromList
-  [ (C 3 3, White)
-  , (C 3 4, Black)
-  , (C 4 3, Black)
-  , (C 4 4, White)
-  ]
-
 end :: Grid -> Bool
-end g = null (moves g Black) && null (moves g White)
+end g = null (moves g black) && null (moves g white)
 
-score :: Color -> Grid -> Double
-score c g = let
-  (my, enemy) = partition (== c) $ Map.elems g
-  in fromIntegral $ length my - length enemy
+ply :: Grid -> Color -> Maybe Ply
+ply g c = ((,) g) <$> NL.nonEmpty (moves g c)
 
-upperLeft :: [(Coord, Double)]
+score = finalScore
+
+finalScore :: Grid -> Double
+finalScore g =
+  let (b, w) = count g in
+  if (b < w) 
+    then fromIntegral w / fromIntegral (b + w) + 1 / 2
+    else negate $ fromIntegral b / fromIntegral (b + w) - 1 / 2
+
+evalPositions :: Grid -> Double
+evalPositions g =
+  let s = Vec.foldl' (+) 0 . Vec.zipWith (*) weights . Vec.map fromIntegral $ g
+  in s / 82
+
+eval :: Grid -> Double
+eval g = finalScore g + evalPositions g
+
+upperLeft :: [[Double]]
 upperLeft =
-  [ (C 0 0, 16.0)
-  , (C 0 1, -3.0)
-  , (C 0 2, 1.0)
-  , (C 0 3, 0.5)
-  , (C 1 0, -4)
-  , (C 1 1, -1.8)
-  , (C 1 2, 0)
-  , (C 1 3, 0)
-  , (C 2 0, 1.3)
-  , (C 2 1, 0)
-  , (C 2 2, 0.5)
-  , (C 2 3, 0)
-  , (C 3 0, 0.5)
-  , (C 3 1, 0)
-  , (C 3 2, 0)
-  , (C 3 3, 0)
+  [ [ 16.0, -3.0, 1.0, 0.5 ]
+  , [ -4  , -1.8, 0  , 0 ]
+  , [ 1.3 , 0   , 0.5, 0 ]
+  , [ 0.5 , 0   , 0  , 0 ]
   ]
 
-weights = Map.fromList $
-     upperLeft 
-  ++ map (\(C x y, w) -> (C (7 - x) y, w)) upperLeft
-  ++ map (\(C x y, w) -> (C x (7 - y), w)) upperLeft
-  ++ map (\(C x y, w) -> (C y x, w)) upperLeft
+weights =
+  let y = map (\x -> x ++ reverse x) upperLeft
+  in Vec.fromList $ concat $ y ++ reverse y
 
-eval :: Color -> Grid -> Double
-eval c g = 
-  sum $ [fromMaybe 0.0 $ Map.lookup (C x y) weights |
-          x <- [0..7]
-        , y <- [0..7]
-        , Map.lookup (C x y) g == Just c
-        ]
+  -- weights = Map.fromList $
+--      upperLeft 
+--   ++ map (\(C x y, w) -> (C (7 - x) y, w)) upperLeft
+--   ++ map (\(C x y, w) -> (C x (7 - y), w)) upperLeft
+--   ++ map (\(C x y, w) -> (C y x, w)) upperLeft
+
+-- eval :: Color -> Grid -> Double
+-- eval c g = 
+--   sum $ [fromMaybe 0.0 $ Map.lookup (C x y) weights |
+--           x <- [0..7]
+--         , y <- [0..7]
+--         , Map.lookup (C x y) g == Just c
+--         ]

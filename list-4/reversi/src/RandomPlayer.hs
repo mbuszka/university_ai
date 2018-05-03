@@ -1,14 +1,10 @@
 module RandomPlayer where
 
 import Reversi
+import Grid
 import System.Random
 import qualified Data.Map as Map
+import qualified Data.List.NonEmpty as NL
 
-
-play :: Color -> Grid -> IO (Maybe Grid)
-play c g = let
-  m = moves g c
-  n = length m
-  in if n == 0
-    then return Nothing
-    else Just . (m !!) <$> randomRIO (0, n-1)
+play :: Color -> Ply -> IO Grid
+play c (g, gs) = (gs NL.!!) <$> randomRIO (0, length gs - 1)

@@ -24,6 +24,10 @@ dependencies:
 - containers
 - random
 - vector
+- vector-instances
+- hashable
+- hashtables
+- stm
 
 library:
   source-dirs: src
