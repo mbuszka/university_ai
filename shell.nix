@@ -7,9 +7,7 @@ stdenv.mkDerivation
       scala
       sbt
       jdk
-      # haskellPackages.purescript
-      # nodejs
-      # nodePackages.bower
+      stack
     ] ++ (with python3.pkgs;
     [
       python

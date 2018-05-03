@@ -15,8 +15,11 @@ import Grid
 
 type Ply = (Grid, NonEmpty Grid)
 
-dirs :: [Dir]
-dirs = [ N, NE, E, SE, S, SW, W, NW ]
+posInf :: Double
+posInf = 1 / 0
+
+negInf :: Double
+negInf = - posInf
 
 paths :: Coord -> Grid -> [[(Int, Color)]]
 paths c g = [path c d g | d <- dirs]
@@ -49,22 +52,45 @@ end g = null (moves g black) && null (moves g white)
 ply :: Grid -> Color -> Maybe Ply
 ply g c = ((,) g) <$> NL.nonEmpty (moves g c)
 
-score = finalScore
-
-finalScore :: Grid -> Double
-finalScore g =
+evalPosession :: Grid -> Double
+evalPosession g =
   let (b, w) = count g in
-  if (b < w) 
+  if b < w
     then fromIntegral w / fromIntegral (b + w) + 1 / 2
-    else negate $ fromIntegral b / fromIntegral (b + w) - 1 / 2
+    else negate $ fromIntegral b / fromIntegral (b + w) + 1 / 2
 
 evalPositions :: Grid -> Double
 evalPositions g =
   let s = Vec.foldl' (+) 0 . Vec.zipWith (*) weights . Vec.map fromIntegral $ g
   in s / 82
 
+evalMobility :: Grid -> Double
+evalMobility g =
+  let w = length $ moves g white
+      b = length $ moves g black
+  in if b < w 
+    then fromIntegral w / fromIntegral (w + b) + 1/2
+    else negate $ fromIntegral b / fromIntegral (b + w) + 1 / 2
+
+evalCorners :: Grid -> Double
+evalCorners g = fromIntegral (sum $ map (g Vec.!) [ 0, 7, 56, 63]) / 4
+
+evalFrontier :: Grid -> Double
+evalFrontier g = 
+  let (b, w) = count . Vec.imap (\c v -> if hasEmptyNeighbour g $ fromLin c then v else 0) $ g
+  in if b < w
+    then negate $ fromIntegral w / fromIntegral (b + w) + 1 / 2
+    else fromIntegral b / fromIntegral (b + w) + 1 / 2
+
+finalScore :: Grid -> Double
+finalScore g = let (b, w) = count g
+  in case b `compare` w of
+    LT -> posInf
+    EQ -> 0
+    GT -> negInf
+
 eval :: Grid -> Double
-eval g = finalScore g + evalPositions g
+eval g = evalPositions g + evalPosession g + evalFrontier g
 
 upperLeft :: [[Double]]
 upperLeft =

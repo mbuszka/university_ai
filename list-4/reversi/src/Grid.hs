@@ -16,6 +16,10 @@ type Grid = Vector Color
 data Dir = N | NE | E | SE | S | SW | W | NW
   deriving (Eq, Show)
 
+
+dirs :: [Dir]
+dirs = [ N, NE, E, SE, S, SW, W, NW ]
+
 white :: Color
 white = 1
 
@@ -58,6 +62,12 @@ diff NW = (1, -1)
 plus :: Coord -> Coord -> Coord
 plus (x, y) (dx, dy) = (x + dx, y + dy)
 
+neighbours :: Coord -> [Coord]
+neighbours c = filter goodCoord . map (plus c . diff) $ dirs
+
+hasEmptyNeighbour :: Grid -> Coord -> Bool
+hasEmptyNeighbour g = any ((0 ==) . (g Vec.!) . toLin) . neighbours
+
 goodCoord :: Coord -> Bool
 goodCoord (x, y) = 0 <= x && x < 8 && 0 <= y && y < 8 
 
@@ -90,6 +100,3 @@ count = Vec.foldl'
     0  -> (b, w)
     1  -> (b, w + 1))
   (0, 0)
-
-mapCorners :: (Color -> Color) -> Grid -> Grid
-mapCorners f = Vec.imap (\i a -> if elem i [0, 7, 56, 63] then f a else a)

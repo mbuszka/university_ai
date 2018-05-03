@@ -1,10 +1,20 @@
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE BangPatterns, DeriveGeneric, DeriveAnyClass #-}
+
 module MinMax where
 
 import Reversi
 import Grid
+
+import Control.Concurrent
+import Control.Concurrent.STM.TVar
+import Control.Concurrent.STM
+import Control.DeepSeq
+import Control.Exception.Base (evaluate)
 import Data.IORef
+import GHC.Generics
 import Data.List
+import Data.Maybe
 import Data.Function
 import qualified Data.List.NonEmpty as NL
 import qualified Data.HashTable.IO as H
@@ -13,73 +23,72 @@ import Data.Vector.Instances
 
 type HashTable k v = BH.BasicHashTable k v
 
-posInf :: Double
-posInf = 1 / 0
-
-negInf :: Double
-negInf = - posInf
-
 data Ctx = Ctx
-  { cache :: HashTable Grid Double
-  , succesfull :: IORef Int
-  , total :: IORef Int
+  { leaves :: IORef Int
+  , heuristic :: IORef Int
+  , inner :: IORef Int
   }
 
-data Tree = Node Color Grid [Tree]
+showCtx :: Ctx -> IO ()
+showCtx ctx = do
+  l <- readIORef $ leaves ctx
+  h <- readIORef $ heuristic ctx
+  i <- readIORef $ inner ctx
+  putStrLn $ "inner: " ++ show i ++ " leaves: " ++ show l ++ " heuristic: " ++ show h 
+
+data Tree = Node 
+  { color :: Color
+  , value :: Double
+  , grid :: Grid
+  , children :: [Tree]
+  }
+  deriving (Generic, NFData)
+
+score :: Tree -> Double
+score (Node c s _ _) = fromIntegral (other c) * s
 
 startTree :: Color -> Grid -> Tree
-startTree c g = Node c g [startTree (other c) g' | g' <- moves g c]
+startTree c g = let s = eval g in
+  Node c s g [startTree (other c) g' | g' <- moves g c]
 
-sortChildren :: Ctx -> Tree -> IO Tree
-sortChildren ctx (Node c g gs) = do
-  gs' <- traverse (\(Node c g gs) -> do
-    let f Nothing = let s = eval g in (Just s, s)
-        f (Just s) = (Just s, s)
-    s <- H.mutate (cache ctx) g f
-    return (fromIntegral c * s, Node c g gs)) gs
-  let sorted = map snd $ sortOn fst gs'
-  return $ Node c g sorted
+sortChildren :: [Tree] -> [Tree]
+sortChildren = sortOn (\n -> -1 * score n)
 
 newCtx :: () -> IO Ctx
-newCtx () = do
-  cache <- H.new
-  succesfull <- newIORef 0
-  total <- newIORef 0
-  return $ Ctx { cache, succesfull, total }
+newCtx () = Ctx <$> newIORef 0 <*> newIORef 0 <*> newIORef 0
 
-negamax :: Ctx -> Int -> Double -> Double -> Color -> Tree -> IO Double
-negamax ctx depth alpha beta color tree@(Node _ grid _)
+negamax :: Ctx -> Int -> Double -> Double -> Tree -> IO Tree
+negamax ctx depth alpha beta tree@(Node color _ grid children)
   | end grid = do
-      let s = score grid
-      H.insert (cache ctx) grid s
-      return (fromIntegral color * s)
+      let s = finalScore grid
+      modifyIORef' (leaves ctx) (+ 1)
+      return $ Node color s grid children
   | depth == 0 = do
-    let s = eval grid
-    H.insert (cache ctx) grid s
-    return (fromIntegral color * s)
+      modifyIORef' (heuristic ctx) (+ 1)
+      return tree
   | otherwise = do
-      -- print "sorting"
-      Node _ _ gs <- return tree -- sortChildren ctx tree
-      -- print "sorted"
-      let aux _ _ val [] = return val
-          aux alpha beta val (n:ns) = do
-            let Node _ g _ = n
-            -- mv <- H.lookup (cache ctx) g
-            -- modifyIORef' (total ctx) (+ 1)
-            -- val' <- case mv of
-            --   Just v -> do
-            --     modifyIORef' (succesfull ctx) (+ 1) 
-            --     return v
-            --   Nothing -> do
-            val' <- negate <$> negamax ctx (depth - 1) (- beta) (- alpha) (other color) n
-            H.insert (cache ctx) g val'
-            -- return v
-            let best = max val val'
-                alpha' = max alpha val'
-            if alpha >= beta
-              then return $ best
-              else aux alpha' beta best ns
-      aux alpha beta negInf gs
+      val <- newIORef negInf
+      modifyIORef' (inner ctx) (+ 1)
+      -- putStrLn $ "beginning work at depth: " ++ show depth
+      let sorted = sortChildren children
+      let aux !_ !_ [] = return []
+          aux !alpha !beta (n:ns) = do
+            n' <- negamax ctx (depth - 1) (- beta) (- alpha) n
+            modifyIORef' val (max (score n'))
+            alpha' <- max alpha <$> readIORef val
+            if alpha' >= beta
+              then return (n' : ns)
+              else (n' :) <$> aux alpha' beta ns
+      -- aux alpha beta negInf gs
+      children <- aux alpha beta sorted
+      value <- readIORef val
+      let s = fromIntegral color * value
+      -- putStrLn $ "depth: " ++ show depth ++ " value: " ++ show value
+      return $ Node color s grid children 
+
+showTree :: Int -> Tree -> String
+showTree 1 n@(Node c s g ts) = "( " ++ show (value n) ++ " " ++ show (map value ts) ++ " )"
+showTree 2 n@(Node c s g ts) = "( " ++ show (value n) ++ "\n" ++ unlines (map (\t -> "  " ++ showTree 1 t) ts) ++ ")"
 
   
 -- maxVal :: Int -> Color -> Double -> Double -> Grid -> Double
@@ -115,25 +124,48 @@ revcompare a b = case compare a b of
   EQ -> EQ
   LT -> GT
 
+mySeq [] = []
+mySeq ((!h):t) = h:mySeq t 
+
+forceTree :: Tree -> Tree
+forceTree (Node !c !s !g ts) = Node c s g (mySeq ts) 
+
+work :: Ctx -> TVar Tree -> Int -> IO ()
+work ctx var k = do
+  -- ctx <- newCtx ()
+  -- putStrLn $ "iteration: " ++ show k
+  tree <- atomically $ readTVar var
+  tree'@(Node !_ !s' !_ !_) <- negamax ctx k negInf posInf tree
+  evaluate $ tree'
+  atomically $ writeTVar var tree'
+  -- if score tree' == score tree 
+  --   then do
+  --     putStrLn "yielding"
+  --     yield
+  --   else work var (k + 1)
+
+
 search :: Color -> Ply -> IO Grid
 search c (g, gs) =
   let tree = startTree c g
   in do
     ctx <- newCtx ()
-    -- print "begin"
-    negamax ctx 1 negInf posInf c tree
-    -- print "done lvl 1"
-    negamax ctx 2 negInf posInf c tree
-    -- print "done lvl 2"
-    -- negamax ctx 3 negInf posInf c tree
-    -- print "done lvl 3"
-    Node _ _ gs <- sortChildren ctx tree
-    -- m <- mapM (\s -> (,) s <$> negamax ctx 2 negInf posInf c s) ms
-    -- s <- readIORef (succesfull ctx)
-    -- t <- readIORef (total ctx)
-    -- print $ "total lookups: " ++ show t
-    -- print $ "succesfull percentage: " ++ show (100 * fromIntegral s / fromIntegral t)
-    return $ (\(Node _ g _) -> g) $ head gs
+    var <- atomically $ newTVar (startTree c g)
+    -- putStrLn "forking"
+    -- id <- forkIO (work var 1)
+    -- threadDelay 100000
+    -- putStrLn "woke up"
+    -- killThread id
+    -- putStrLn "worker killed"
+    work ctx var 1
+    work ctx var 2
+    work ctx var 3
+    -- work ctx var 4
+    -- showCtx ctx
+    -- work var 
+    tree <- atomically $ readTVar var
+    -- putStrLn $ showTree 2 tree
+    return $ grid . head . sortChildren . children $ tree
 
 searchM :: Color -> Ply -> IO Grid
 searchM c p = search c p

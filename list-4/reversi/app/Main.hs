@@ -39,7 +39,7 @@ train k weights = do
   case g of
     Nothing -> return weights
     Just g -> do
-      f <- score <$> oneGame g play play
+      f <- evalPosession <$> oneGame g play play
       return $ Vec.zipWith (+) weights . Vec.map (\i -> fromIntegral i * (f * 0.01)) $ g
 
 oneGame :: Grid -> (Color -> Ply -> IO Grid) -> (Color -> Ply -> IO Grid) -> IO Grid
@@ -69,6 +69,6 @@ main = do
   -- replicateM_ 10000 (oneGame initial f f)
   -- l <- readIORef acc
   -- putStrLn $ "minimum: " ++ show (minimum l) ++ " max: " ++ show (maximum l)
-  scores <- replicateM 1000 (score <$> oneGame initial searchM play)
+  scores <- replicateM 1000 (evalPosession <$> oneGame initial searchM play)
   print $ result scores
   -- trains 1000 (Vec.replicate 64 0)
