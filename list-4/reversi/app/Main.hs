@@ -4,6 +4,7 @@ import Control.Monad
 import Data.Maybe
 import Data.IORef
 
+import System.Environment
 import Reversi
 import Grid
 import RandomPlayer
@@ -60,6 +61,8 @@ trains k weights = train 10 weights >>= trains (k-1)
 
 main :: IO ()
 main = do
+  t:_ <- getArgs
+  let time = read t 
   acc <- newIORef []
   let 
     f c p = do
@@ -69,6 +72,6 @@ main = do
   -- replicateM_ 10000 (oneGame initial f f)
   -- l <- readIORef acc
   -- putStrLn $ "minimum: " ++ show (minimum l) ++ " max: " ++ show (maximum l)
-  scores <- replicateM 1000 (evalPosession <$> oneGame initial searchM play)
+  scores <- replicateM 1000 (evalPosession <$> oneGame initial (search time) play)
   print $ result scores
   -- trains 1000 (Vec.replicate 64 0)

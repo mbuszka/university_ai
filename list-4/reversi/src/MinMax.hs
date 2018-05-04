@@ -11,6 +11,7 @@ import Control.Concurrent.STM.TVar
 import Control.Concurrent.STM
 import Control.DeepSeq
 import Control.Exception.Base (evaluate)
+import System.Timeout
 import Data.IORef
 import GHC.Generics
 import Data.List
@@ -135,37 +136,33 @@ work ctx var k = do
   -- ctx <- newCtx ()
   -- putStrLn $ "iteration: " ++ show k
   tree <- atomically $ readTVar var
-  tree'@(Node !_ !s' !_ !_) <- negamax ctx k negInf posInf tree
-  evaluate $ tree'
+  tree'@(Node !_ !s' !_ !ts) <- negamax ctx k negInf posInf tree
+  evaluate $ ts
   atomically $ writeTVar var tree'
-  -- if score tree' == score tree 
-  --   then do
-  --     putStrLn "yielding"
-  --     yield
-  --   else work var (k + 1)
+  if score tree' == score tree 
+    then return ()
+    else work ctx var (k + 1)
 
 
-search :: Color -> Ply -> IO Grid
-search c (g, gs) =
+search :: Int -> Color -> Ply -> IO Grid
+search time c (g, gs) =
   let tree = startTree c g
   in do
     ctx <- newCtx ()
     var <- atomically $ newTVar (startTree c g)
     -- putStrLn "forking"
-    -- id <- forkIO (work var 1)
-    -- threadDelay 100000
+    -- id <- forkIO (work ctx var 1)
+    v <- timeout time (work ctx var 1)
+    evaluate v
     -- putStrLn "woke up"
     -- killThread id
     -- putStrLn "worker killed"
-    work ctx var 1
-    work ctx var 2
-    work ctx var 3
+    -- work ctx var 1
+    -- work ctx var 2
+    -- work ctx var 3
     -- work ctx var 4
     -- showCtx ctx
     -- work var 
     tree <- atomically $ readTVar var
     -- putStrLn $ showTree 2 tree
     return $ grid . head . sortChildren . children $ tree
-
-searchM :: Color -> Ply -> IO Grid
-searchM c p = search c p
