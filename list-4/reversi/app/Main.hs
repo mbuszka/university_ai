@@ -74,7 +74,7 @@ main = do
       "time" -> Timed n
       "fixed" -> Fixed n
     doSort = null t
-    ctx = Ctx mode doSort (Vec.fromListN 3 [5.56, 9.74, 9.68])
+    ctx = Ctx mode doSort (Vec.fromListN 3 [502.78, 19.59, 431.02])
   -- acc <- newIORef []
   -- let 
   --   f c p = do
@@ -96,7 +96,7 @@ main = do
           print (weights, score)
           return (weights, score)
       in do
-        scores <- replicateM 100 one
+        scores <- replicateM 200 one
         let top = maximumBy (compare `on` snd) scores
         putStrLn $ "best: " ++ show top
         -- print top
