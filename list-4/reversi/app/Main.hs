@@ -1,9 +1,14 @@
 module Main where
 
+import Control.Concurrent.STM
+import Control.Concurrent.STM.TVar
 import Control.Monad
 import Data.Maybe
 import Data.IORef
+import Data.List
+import Data.Function
 
+import System.Random
 import System.Environment
 import Reversi
 import Grid
@@ -61,17 +66,40 @@ trains k weights = train 10 weights >>= trains (k-1)
 
 main :: IO ()
 main = do
-  t:_ <- getArgs
-  let time = read t 
-  acc <- newIORef []
+  comStr:modStr:numStr:t <- getArgs
+  let n = read numStr
   let 
-    f c p = do
-      g <- play c p
-      modifyIORef' acc (eval g :)
-      return g
+    mode = case modStr of
+      "iter" -> Iter n
+      "time" -> Timed n
+      "fixed" -> Fixed n
+    doSort = null t
+    ctx = Ctx mode doSort (Vec.fromListN 3 [5.56, 9.74, 9.68])
+  -- acc <- newIORef []
+  -- let 
+  --   f c p = do
+  --     g <- play c p
+  --     modifyIORef' acc (eval g :)
+  --     return g
   -- replicateM_ 10000 (oneGame initial f f)
   -- l <- readIORef acc
   -- putStrLn $ "minimum: " ++ show (minimum l) ++ " max: " ++ show (maximum l)
-  scores <- replicateM 1000 (evalPosession <$> oneGame initial (search time) play)
-  print $ result scores
+  case comStr of
+    "run" -> do
+      scores <- replicateM 1000 (evalPosession <$> oneGame initial (search ctx) play)
+      print $ result scores
+    "train" -> let 
+        one = do
+          weights <- Vec.fromListN 3 <$> replicateM 3 (randomRIO (1, 1000))
+          let ctx' = ctx { hParam = weights }
+          score <- result <$> replicateM 1000 (evalPosession <$> oneGame initial (search ctx') play)
+          print (weights, score)
+          return (weights, score)
+      in do
+        scores <- replicateM 100 one
+        let top = maximumBy (compare `on` snd) scores
+        putStrLn $ "best: " ++ show top
+        -- print top
+
+      
   -- trains 1000 (Vec.replicate 64 0)

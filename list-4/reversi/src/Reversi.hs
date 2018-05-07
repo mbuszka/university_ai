@@ -10,6 +10,7 @@ import           Data.Maybe as Maybe
 import qualified Data.Set as Set
 import           Data.Set (Set)
 import qualified Data.Vector.Unboxed as Vec
+import           Data.Vector.Unboxed (Vector)
 
 import Grid
 
@@ -89,8 +90,11 @@ finalScore g = let (b, w) = count g
     EQ -> 0
     GT -> negInf
 
-eval :: Grid -> Double
-eval g = evalPositions g + evalPosession g + evalFrontier g
+eval :: Vector Double -> Grid -> Double
+eval w g = 
+    (w Vec.! 0) * evalPositions g
+  + (w Vec.! 1) * evalPosession g
+  + (w Vec.! 2) * evalFrontier g
 
 upperLeft :: [[Double]]
 upperLeft =
