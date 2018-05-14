@@ -73,8 +73,8 @@ evalMobility g =
     then fromIntegral w / fromIntegral (w + b) + 1/2
     else negate $ fromIntegral b / fromIntegral (b + w) + 1 / 2
 
-evalCorners :: Grid -> Double
-evalCorners g = fromIntegral (sum $ map (g Vec.!) [ 0, 7, 56, 63]) / 4
+-- evalCorners :: Grid -> Double
+-- evalCorners g = fromIntegral (sum $ map (g Vec.!) [ 0, 7, 56, 63]) / 4
 
 evalFrontier :: Grid -> Double
 evalFrontier g = 
@@ -90,11 +90,23 @@ finalScore g = let (b, w) = count g
     EQ -> 0
     GT -> negInf
 
+evalCorners :: Grid -> Double
+evalCorners g = let
+  ix = [ (0, [1, 8])
+       , (7, [6, 15])
+       , (56, [48, 57])
+       , (63, [62, 55])
+       ]
+  f (c, [a, b]) = if g Vec.! c == 0 
+    then 2 * (g Vec.! a) + 2 * (g Vec.! b)
+    else 10 * (g Vec.! c)
+  in fromIntegral $ sum $ map f ix
+
 eval :: Vector Double -> Grid -> Double
-eval w g = 
-    (w Vec.! 0) * evalPositions g
-  + (w Vec.! 1) * evalPosession g
-  + (w Vec.! 2) * evalFrontier g
+eval w g = evalCorners g
+  --   (w Vec.! 0) * evalPositions g
+  -- + (w Vec.! 1) * evalPosession g
+  -- + (w Vec.! 2) * evalFrontier g
 
 upperLeft :: [[Double]]
 upperLeft =
