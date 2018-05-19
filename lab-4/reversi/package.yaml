@@ -7,13 +7,15 @@ extra-source-files:
 
 dependencies:
 - base >= 4.7 && < 5
+- array
 - containers
 - deepseq
 - random
+- streaming
 - vector
 - vector-instances
-- hashable
-- hashtables
+# - hashable
+# - hashtables
 - stm
 
 library:

@@ -36,90 +36,90 @@ data Ctx = Ctx
 --   i <- readIORef $ inner ctx
 --   putStrLn $ "inner: " ++ show i ++ " leaves: " ++ show l ++ " heuristic: " ++ show h 
 
-data Tree = Node 
-  { color :: Color
-  , value :: Double
-  , grid :: Grid
-  , children :: [Tree]
-  }
-  deriving (Generic, NFData)
+-- data Tree = Node 
+--   { color :: Color
+--   , value :: Double
+--   , grid :: Grid
+--   , children :: [Tree]
+--   }
+--   deriving (Generic, NFData)
 
-score :: Tree -> Double
-score (Node c s _ _) = fromIntegral (other c) * s
+-- score :: Tree -> Double
+-- score (Node c s _ _) = fromIntegral (other c) * s
 
-startTree :: Vector Double -> Color -> Grid -> Tree
-startTree w c g = let s = eval w g in
-  Node c s g [startTree w (other c) g' | g' <- moves g c]
+-- startTree :: Vector Double -> Color -> Grid -> Tree
+-- startTree w c g = let s = eval w g in
+--   Node c s g [startTree w (other c) g' | g' <- moves g c]
 
-sortChildren :: [Tree] -> [Tree]
-sortChildren = sortOn (\n -> -1 * score n)
+-- sortChildren :: [Tree] -> [Tree]
+-- sortChildren = sortOn (\n -> -1 * score n)
 
-negamax :: Ctx -> Int -> Double -> Double -> Tree -> IO Tree
-negamax ctx depth alpha beta tree@(Node color _ grid children)
-  | end grid = do
-      let s = finalScore grid
+negamax :: Ctx -> Int -> Color -> Double -> Double -> Tree -> IO Double
+negamax ctx depth c alpha beta tree
+  | isTerminal tree = do
+      let s = finalScore $ grid tree
       -- modifyIORef' (leaves ctx) (+ 1)
-      return $ Node color s grid children
+      return s
   | depth == 0 = do
       -- modifyIORef' (heuristic ctx) (+ 1)
-      return tree
+      return $ eval' (grid tree)
   | otherwise = do
       val <- newIORef negInf
       -- modifyIORef' (inner ctx) (+ 1)
       -- putStrLn $ "beginning work at depth: " ++ show depth
-      let sorted = if doSort ctx then sortChildren children else children
-      let aux !_ !_ [] = return []
+      let sorted = if c == white then whiteM tree else blackM tree
+      let aux !_ !_ [] = readIORef val
           aux !alpha !beta (n:ns) = do
-            n' <- negamax ctx (depth - 1) (- beta) (- alpha) n
-            modifyIORef' val (max (score n'))
+            n' <- (fromIntegral c *) <$> negamax ctx (depth - 1) (other c) (- beta) (- alpha) n
+            modifyIORef' val (max n')
             alpha' <- max alpha <$> readIORef val
             if alpha' >= beta
-              then return (n' : ns)
-              else (n' :) <$> aux alpha' beta ns
+              then readIORef val -- return (n' : ns)
+              else aux alpha' beta ns
       -- aux alpha beta negInf gs
-      children <- aux alpha beta sorted
-      value <- readIORef val
-      let s = fromIntegral color * value
+      -- children <- aux alpha beta sorted
+      value <- aux alpha beta sorted
+      -- let s = fromIntegral color * value
       -- putStrLn $ "depth: " ++ show depth ++ " value: " ++ show value
-      return $ Node color s grid children 
+      return $ value -- Node color s grid children 
 
-showTree :: Int -> Tree -> String
-showTree 1 n@(Node c s g ts) = "( " ++ show (value n) ++ " " ++ show (map value ts) ++ " )"
-showTree 2 n@(Node c s g ts) = "( " ++ show (value n) ++ "\n" ++ unlines (map (\t -> "  " ++ showTree 1 t) ts) ++ ")"
+-- showTree :: Int -> Tree -> String
+-- showTree 1 n@(Node c s g ts) = "( " ++ show (value n) ++ " " ++ show (map value ts) ++ " )"
+-- showTree 2 n@(Node c s g ts) = "( " ++ show (value n) ++ "\n" ++ unlines (map (\t -> "  " ++ showTree 1 t) ts) ++ ")"
 
-timed :: Ctx -> TVar Tree -> Int -> IO ()
-timed ctx var k = do
-  tree <- atomically $ readTVar var
-  tree'@(Node !_ !s' !_ !ts) <- negamax ctx k negInf posInf tree
-  evaluate $ ts
-  atomically $ writeTVar var tree'
-  if score tree' == score tree 
-    then return ()
-    else timed ctx var (k + 1)
+-- timed :: Ctx -> TVar Tree -> Int -> IO ()
+-- timed ctx var k = do
+--   tree <- atomically $ readTVar var
+--   tree'@(Node !_ !s' !_ !ts) <- negamax ctx k negInf posInf tree
+--   evaluate $ ts
+--   atomically $ writeTVar var tree'
+--   if score tree' == score tree 
+--     then return ()
+--     else timed ctx var (k + 1)
 
-depth :: Ctx -> Int -> Tree -> IO Tree
-depth ctx k tree = do
-  tree@(Node !_ !_ !_ !ts) <- negamax ctx k negInf posInf tree
-  evaluate ts
-  return tree
+-- depth :: Ctx -> Int -> Tree -> IO Tree
+-- depth ctx k tree = do
+--   tree@(Node !_ !_ !_ !ts) <- negamax ctx k negInf posInf tree
+--   evaluate ts
+--   return tree
 
-search :: Ctx -> Color -> Ply -> IO Grid
-search ctx c (g, gs) =
-  let begin = startTree (hParam ctx) c g
-  in grid . head . sortChildren . children <$>
-    case mode ctx of
-      Timed t -> do
-        var <- atomically $ newTVar begin
-        thunk <- timeout t (timed ctx var 1)
-        evaluate thunk
-        atomically $ readTVar var
-      Iter k -> do
-        var <- atomically $ newTVar begin
-        for_ [1 .. k] (\i -> do
-          t <- atomically $ readTVar var
-          t' <- depth ctx i t
-          atomically $ writeTVar var t'
-          )
-        atomically $ readTVar var
-      Fixed k ->
-        depth ctx k begin
+-- search :: Ctx -> Color -> Ply -> IO Grid
+-- search ctx c (g, gs) =
+--   let begin = startTree (hParam ctx) c g
+--   in grid . head . sortChildren . children <$>
+--     case mode ctx of
+--       Timed t -> do
+--         var <- atomically $ newTVar begin
+--         thunk <- timeout t (timed ctx var 1)
+--         evaluate thunk
+--         atomically $ readTVar var
+--       Iter k -> do
+--         var <- atomically $ newTVar begin
+--         for_ [1 .. k] (\i -> do
+--           t <- atomically $ readTVar var
+--           t' <- depth ctx i t
+--           atomically $ writeTVar var t'
+--           )
+--         atomically $ readTVar var
+--       Fixed k ->
+--         depth ctx k begin

@@ -2,10 +2,19 @@
 -- {-# LANGUAGE FlexibleInstances #-}
 module Grid where
 
--- import           Data.Hashable
+import           Data.Functor.Identity
+import           Control.Monad
+import           Control.Monad.ST
+import qualified Data.Array as Arr
+import           Data.Array (Ix, Array)
+import qualified Data.Map as Map
+import           Data.Map (Map)
+import           Data.Maybe
 import           Data.Int
 import qualified Data.Vector.Unboxed as Vec
+import qualified Data.Vector.Unboxed.Mutable as MVec
 import           Data.Vector.Unboxed (Vector)
+import qualified Streaming.Prelude as S
 
 type Color = Int8
 type Coord = (Int, Int)
@@ -14,7 +23,7 @@ type Grid = Vector Color
 -- instance Hashable (Vector Color)
 
 data Dir = N | NE | E | SE | S | SW | W | NW
-  deriving (Eq, Show)
+  deriving (Ix, Eq, Ord, Show)
 
 
 dirs :: [Dir]
@@ -62,6 +71,9 @@ diff NW = (1, -1)
 plus :: Coord -> Coord -> Coord
 plus (x, y) (dx, dy) = (x + dx, y + dy)
 
+step :: Dir -> Coord -> Coord
+step d c = plus c (diff d)
+
 neighbours :: Coord -> [Coord]
 neighbours c = filter goodCoord . map (plus c . diff) $ dirs
 
@@ -71,16 +83,106 @@ hasEmptyNeighbour g = any ((0 ==) . (g Vec.!) . toLin) . neighbours
 goodCoord :: Coord -> Bool
 goodCoord (x, y) = 0 <= x && x < 8 && 0 <= y && y < 8 
 
-indices :: Coord -> Dir -> [Int]
-indices c d =
-  let cs = map toLin . takeWhile goodCoord . iterate (plus . diff $ d) $ c
-  in cs
+-- indices :: Array (Int, Int, Dir) (Vector Int)
+-- indices = Arr.array ((0, 0, N), (7, 7, NW)) $ 
+--   [ ((x, y, d), gen x y d) | x <- [0 .. 7], y <- [0 .. 7], d <- dirs ]
 
-path :: Coord -> Dir -> Grid -> [(Int, Color)]
-path c d g = map (\i -> (i, g Vec.! i)) $ indices c d
+-- gen :: Int -> Int -> Dir -> Vector Int
+-- gen x y d = Vec.unfoldr (\c -> if goodCoord c then Just (toLin c, step d c) else Nothing) (x, y)
 
-emptyTiles :: Grid -> [Coord]
-emptyTiles = map fromLin . Vec.toList . Vec.elemIndices 0
+gen :: Int -> Int -> Dir -> S.Stream (S.Of Int) Identity ()
+gen x y d = S.map toLin . S.takeWhile goodCoord $ S.iterate (step d) (x, y)
+
+-- applyMove :: Color -> Coord -> Grid -> Grid
+-- applyMove c (x, y) g =
+--   let
+--     one d v = do
+--       let is = indices Arr.! (x, y, d)
+--       c <- MVec.read v (is Vec.! 0)
+
+
+-- allIndices :: Map (Coord, Dir) [Int]
+-- allIndices = Map.fromList $
+--   [ (((x, y), d), gen (x, y) d) | x <- [0 .. 7], y <- [0 .. 7], d <- dirs]
+
+-- indices c d = allIndices Map.! (c, d)
+
+-- gen :: Coord -> Dir -> [Int]
+-- gen c d =
+--   let cs = map toLin . takeWhile goodCoord . iterate (plus . diff $ d) $ c
+--   in cs
+
+{-# INLINE is #-}
+is :: Color -> Grid -> Coord -> Bool
+is col g coord = g Vec.! (toLin coord) == col
+
+when :: (a -> Bool) -> a -> Maybe a
+when p x
+  | p x = Just x
+  | otherwise = Nothing
+
+whileM :: Monad m => (a -> Bool) -> (a -> m a) -> a -> m a
+whileM p f x = if p x then whileM p f =<< (f x) else return x
+
+{-# INLINE vHead #-}
+vHead v = if Vec.null v then Nothing else Just $ Vec.unsafeHead v
+
+{-# INLINE vTail #-}
+vTail v = if Vec.null v then Nothing else Just $ Vec.unsafeTail v
+
+{-# INLINE vUncons #-}
+vUncons v = if Vec.null v then Nothing else Just (Vec.unsafeHead v, Vec.unsafeTail v)
+
+checkPath :: Color -> Grid -> Coord -> Dir -> Bool
+checkPath col g (x, y) d = isJust $ do
+  let is = gen x y d
+  (h, t) <- runIdentity $ S.uncons is
+  guard (g `Vec.unsafeIndex` h == empty)
+  n <- runIdentity $ S.head_ t
+  guard (g `Vec.unsafeIndex` n == (other col))
+  let rest = S.dropWhile (\i -> g `Vec.unsafeIndex` i == (other col)) t
+  l <- runIdentity $ S.head_ rest
+  guard (g `Vec.unsafeIndex` l == col)
+
+indices :: Color -> Grid -> Coord -> Dir -> S.Stream (S.Of Int) Identity ()
+indices col g (x, y) d =
+  S.cons (toLin (x, y)) .
+  S.takeWhile (\i -> g `Vec.unsafeIndex` i == (other col)) .
+  S.drop 2 $
+  gen x y d  
+
+toChange :: Color -> Grid -> Coord -> S.Stream (S.Of Int) Identity ()
+toChange col g coord = flip S.for (indices col g coord) . S.filter (checkPath col g coord) $ S.each dirs
+
+
+-- path :: Color -> Grid -> Coord -> [Vector Int]
+-- path col g (x, y) = (Vec.singleton $ toLin (x, y)) : mapMaybe check dirs where
+--   check d = 
+--     let is = gen x y d
+--     in {-# SCC path_do #-} do
+--       (h, t) <- runIdentity $ S.uncons is
+--       guard (g `Vec.unsafeIndex` h == empty)
+--       n <- runIdentity $ S.head_ t
+--       guard (g `Vec.unsafeIndex` n == (other col))
+--       let (good, rest) = S.spa (\i -> g `Vec.unsafeIndex` i == (other col)) t
+--       l <- vHead rest
+--       guard (g `Vec.unsafeIndex` l == col)
+--       return good
+
+    -- let step c = when goodCoord $ plus c $ diff d
+    --     opp = other col
+    -- in do
+    --   c1 <- when (is empty g) coord >>= step
+    --   c2 <- when (is opp g) c1 >>= step
+    --   c3 <- whileM (is opp g) step c2
+    --   when (is col g) c3
+
+
+-- path :: Coord -> Dir -> Grid -> [(Int, Color)]
+-- path (x, y) d g = map (\i -> (i, g Vec.! i)) $ Vec.toList $ indices Arr.! (x, y, d)
+
+emptyTiles :: Grid -> S.Stream (S.Of Coord) Identity ()
+emptyTiles = S.map fromLin . S.each . Vec.toList . Vec.elemIndices 0
 
 changeTiles :: Grid -> Color -> [Int] -> Grid
 changeTiles g c is = g Vec.// (map (\i -> (i, c)) is)
