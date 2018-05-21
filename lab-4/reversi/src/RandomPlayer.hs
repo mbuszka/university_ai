@@ -3,8 +3,9 @@ module RandomPlayer where
 import Reversi
 import Grid
 import System.Random
-import qualified Data.Map as Map
-import qualified Data.List.NonEmpty as NL
+import qualified Data.Vector.Generic as Vec
 
-play :: Color -> Ply -> IO Grid
-play c (g, gs) = (gs NL.!!) <$> randomRIO (0, length gs - 1)
+play :: Color -> Tree -> IO Tree
+play c (Tree g wm bm) = 
+  let gs = if c == white then wm else bm
+  in (gs Vec.!) <$> randomRIO (0, Vec.length gs - 1)

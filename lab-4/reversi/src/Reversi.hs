@@ -1,5 +1,6 @@
 module Reversi where
 
+import Data.Functor.Identity
 import           Data.Int
 import qualified Data.List as List
 import qualified Data.List.NonEmpty as NL
@@ -9,12 +10,17 @@ import           Data.Map (Map)
 import           Data.Maybe as Maybe
 import qualified Data.Set as Set
 import           Data.Set (Set)
-import qualified Data.Vector.Unboxed as Vec
-import           Data.Vector.Unboxed (Vector)
+import qualified Data.Vector.Generic as Vec
+import qualified Data.Vector         as BVec
+import qualified Data.Vector.Unboxed as UVec
 
 import Grid
 
-type Ply = (Grid, NonEmpty Grid)
+data Tree = Tree 
+  { grid :: Grid
+  , whiteM :: BVec.Vector Tree
+  , blackM :: BVec.Vector Tree
+  }
 
 posInf :: Double
 posInf = 1 / 0
@@ -22,36 +28,22 @@ posInf = 1 / 0
 negInf :: Double
 negInf = - posInf
 
-paths :: Coord -> Grid -> [[(Int, Color)]]
-paths c g = [path c d g | d <- dirs]
-
-goodPath :: Color -> [(Int, Color)] -> Set Int
-goodPath c [_] = Set.empty
-goodPath c [_, _] = Set.empty
-goodPath c (this:next:rest) =
-  if snd next == other c
-     && sandwich
-  then Set.fromList $ map fst (this:next:toFlip)
-  else Set.empty
-  where
-    (toFlip, tail) = span (\x -> snd x == other c) rest
-    sandwich = Just c == (fmap (snd . fst) . List.uncons $ tail)
-
-goodPos :: Coord -> Color -> Grid -> Set Int
-goodPos coord color g =
-  foldr (Set.union . goodPath color) Set.empty (paths coord g)
-
-moves :: Grid -> Color -> [Grid]
-moves g c =
-  let good = filter (not . Set.null) $ fmap (\coord -> goodPos coord c g) $ emptyTiles g
-      grids = map (changeTiles g c . Set.toList) good
+moves :: Grid -> Color -> BVec.Vector Grid
+moves g col =
+  let good = Vec.filter (check col g) $ emptyTiles g
+      grids = Vec.map (change col g) good
   in grids
 
-end :: Grid -> Bool
-end g = null (moves g black) && null (moves g white)
+isTerminal :: Tree -> Bool
+isTerminal (Tree _ w b) = Vec.null w && Vec.null b
 
-ply :: Grid -> Color -> Maybe Ply
-ply g c = ((,) g) <$> NL.nonEmpty (moves g c)
+hasMoves :: Color -> Tree -> Bool
+hasMoves c (Tree _ wm bm) = if c == white
+  then not $ null wm
+  else not $ null bm
+
+gameTree :: Grid -> Tree
+gameTree start = Tree start (gameTree <$> moves start white) (gameTree <$> moves start black)
 
 evalPosession :: Grid -> Double
 evalPosession g =
@@ -72,9 +64,6 @@ evalMobility g =
   in if b < w 
     then fromIntegral w / fromIntegral (w + b) + 1/2
     else negate $ fromIntegral b / fromIntegral (b + w) + 1 / 2
-
--- evalCorners :: Grid -> Double
--- evalCorners g = fromIntegral (sum $ map (g Vec.!) [ 0, 7, 56, 63]) / 4
 
 evalFrontier :: Grid -> Double
 evalFrontier g = 
@@ -102,11 +91,13 @@ evalCorners g = let
     else 10 * (g Vec.! c)
   in fromIntegral $ sum $ map f ix
 
-eval :: Vector Double -> Grid -> Double
-eval w g = evalCorners g
-  --   (w Vec.! 0) * evalPositions g
-  -- + (w Vec.! 1) * evalPosession g
-  -- + (w Vec.! 2) * evalFrontier g
+eval' = eval (Vec.fromListN 3 [502.78, 19.59, 431.02])
+
+eval :: UVec.Vector Double -> Grid -> Double
+eval w g = -- evalCorners g + evalPositions g + evalPosession g
+    (w Vec.! 0) * evalPositions g
+  + (w Vec.! 1) * evalPosession g
+  + (w Vec.! 2) * evalFrontier g
 
 upperLeft :: [[Double]]
 upperLeft =
@@ -119,17 +110,3 @@ upperLeft =
 weights =
   let y = map (\x -> x ++ reverse x) upperLeft
   in Vec.fromList $ concat $ y ++ reverse y
-
-  -- weights = Map.fromList $
---      upperLeft 
---   ++ map (\(C x y, w) -> (C (7 - x) y, w)) upperLeft
---   ++ map (\(C x y, w) -> (C x (7 - y), w)) upperLeft
---   ++ map (\(C x y, w) -> (C y x, w)) upperLeft
-
--- eval :: Color -> Grid -> Double
--- eval c g = 
---   sum $ [fromMaybe 0.0 $ Map.lookup (C x y) weights |
---           x <- [0..7]
---         , y <- [0..7]
---         , Map.lookup (C x y) g == Just c
---         ]

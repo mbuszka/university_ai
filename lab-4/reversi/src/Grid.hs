@@ -2,23 +2,36 @@
 -- {-# LANGUAGE FlexibleInstances #-}
 module Grid where
 
--- import           Data.Hashable
+import           Data.Functor.Identity
+import           Data.STRef
+import           Control.Monad
+import           Control.Monad.ST
+import qualified Data.Array as Arr
+import           Data.Array (Ix, Array)
+import qualified Data.Map as Map
+import           Data.Map (Map)
+import           Data.Maybe
 import           Data.Int
-import qualified Data.Vector.Unboxed as Vec
-import           Data.Vector.Unboxed (Vector)
+import qualified Data.Vector.Unboxed as UVec
+import qualified Data.Vector.Unboxed.Mutable as MVec
+import qualified Data.Vector as BVec
+import qualified Data.Vector.Generic as Vec
 
 type Color = Int8
 type Coord = (Int, Int)
-type Grid = Vector Color
+type Grid = UVec.Vector Color
 
 -- instance Hashable (Vector Color)
 
 data Dir = N | NE | E | SE | S | SW | W | NW
-  deriving (Eq, Show)
+  deriving (Enum, Eq, Ord, Show)
 
 
-dirs :: [Dir]
-dirs = [ N, NE, E, SE, S, SW, W, NW ]
+dirs :: BVec.Vector Dir
+dirs = Vec.fromListN 8 [ N, NE, E, SE, S, SW, W, NW ]
+
+deltas :: UVec.Vector Coord
+deltas = Vec.convert $ Vec.map diff dirs
 
 white :: Color
 white = 1
@@ -29,12 +42,15 @@ black = -1
 empty :: Color
 empty = 0
 
+{-# INLINE other #-}
 other :: Color -> Color
 other c = - c
 
+{-# INLINE toLin #-}
 toLin :: Coord -> Int
 toLin (x, y) = 8 * x + y
 
+{-# INLINE fromLin #-}
 fromLin :: Int -> Coord
 fromLin v = v `divMod` 8
 
@@ -49,6 +65,7 @@ showGrid g = let
   pix (-1) = 'B'
   in unlines p
 
+{-# INLINE diff #-}
 diff :: Dir -> Coord
 diff N  = (1, 0)
 diff NE = (1, 1)
@@ -59,31 +76,78 @@ diff SW = (-1, -1)
 diff W  = (0, -1)
 diff NW = (1, -1)
 
+{-# INLINE plus #-}
 plus :: Coord -> Coord -> Coord
 plus (x, y) (dx, dy) = (x + dx, y + dy)
 
-neighbours :: Coord -> [Coord]
-neighbours c = filter goodCoord . map (plus c . diff) $ dirs
+{-# INLINE step #-}
+step :: Dir -> Coord -> Coord
+step d c = plus c (diff d)
+
+neighbours :: Coord -> UVec.Vector Coord
+neighbours c = Vec.filter goodCoord . Vec.map (plus c) $ deltas
 
 hasEmptyNeighbour :: Grid -> Coord -> Bool
-hasEmptyNeighbour g = any ((0 ==) . (g Vec.!) . toLin) . neighbours
+hasEmptyNeighbour g = Vec.any ((0 ==) . (g Vec.!) . toLin) . neighbours
 
+{-# INLINE goodCoord #-}
 goodCoord :: Coord -> Bool
 goodCoord (x, y) = 0 <= x && x < 8 && 0 <= y && y < 8 
 
-indices :: Coord -> Dir -> [Int]
-indices c d =
-  let cs = map toLin . takeWhile goodCoord . iterate (plus . diff $ d) $ c
-  in cs
+{-# INLINE is #-}
+is :: Color -> Grid -> Coord -> Bool
+is col g x = g `Vec.unsafeIndex` (toLin x) == col
 
-path :: Coord -> Dir -> Grid -> [(Int, Color)]
-path c d g = map (\i -> (i, g Vec.! i)) $ indices c d
+{-# INLINE checkPath #-}
+checkPath :: Color -> Grid -> Coord -> Dir -> Bool
+checkPath col g c0 d =
+  let c = step d c0
+  in if not (goodCoord c) || (not $ is (other col) g c) then False
+  else
+    let c' = loop c
+    in if not (goodCoord c') || (not $ is col g c') then False
+    else True
+  where
+    loop c =
+      if not (goodCoord c) || (not $ is (other col) g c) then c
+      else loop (step d c)
 
-emptyTiles :: Grid -> [Coord]
-emptyTiles = map fromLin . Vec.toList . Vec.elemIndices 0
+{-# INLINE check #-}
+check :: Color -> Grid -> Coord -> Bool
+check col g c = BVec.any (checkPath col g c) dirs
 
-changeTiles :: Grid -> Color -> [Int] -> Grid
-changeTiles g c is = g Vec.// (map (\i -> (i, c)) is)
+{-# INLINE changeD #-}
+changeD :: Color -> Coord -> MVec.MVector s Int8 -> Dir -> (ST s (MVec.MVector s Int8))
+changeD col c0 g d = do
+  let c' = step d c0
+  MVec.unsafeWrite g (toLin c0) col
+  loop c'
+  return g
+  where
+    loop c = do
+      v <- MVec.unsafeRead g (toLin c)
+      if v /= (other col) then return ()
+      else do
+        MVec.unsafeWrite g (toLin c) col
+        loop (step d c)
+
+{-# INLINE change #-}
+change :: Color -> Grid -> Coord -> Grid
+change col g c = 
+  let 
+    comp = do
+      v <- Vec.thaw g
+      v' <- Vec.foldM (changeD col c) v $ Vec.filter (checkPath col g c) dirs
+      Vec.freeze v'
+  in runST comp 
+
+{-# INLINE emptyTiles #-}
+emptyTiles :: Grid -> BVec.Vector Coord
+emptyTiles = Vec.map fromLin . Vec.convert . Vec.elemIndices 0
+
+{-# INLINE changeTiles #-}
+changeTiles :: Grid -> Color -> UVec.Vector Int -> Grid
+changeTiles g c is = Vec.update g (Vec.map (\i -> (i, c)) is)
 
 initial :: Grid
 initial = Vec.generate 64 (f . fromLin) where

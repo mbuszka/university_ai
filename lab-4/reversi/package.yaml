@@ -7,13 +7,15 @@ extra-source-files:
 
 dependencies:
 - base >= 4.7 && < 5
+- array
 - containers
 - deepseq
 - random
+- streaming
 - vector
 - vector-instances
-- hashable
-- hashtables
+# - hashable
+# - hashtables
 - stm
 
 library:
@@ -28,6 +30,10 @@ executables:
     - -rtsopts
     - -with-rtsopts=-N
     - -O2
+    - -fspecialise-aggressively
+    - -fexpose-all-unfoldings
+    - -funfolding-use-threshold=64
+    - -optc-O3
     dependencies:
     - reversi
 
