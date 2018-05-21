@@ -10,16 +10,16 @@ import           Data.Map (Map)
 import           Data.Maybe as Maybe
 import qualified Data.Set as Set
 import           Data.Set (Set)
-import qualified Streaming.Prelude as S
-import qualified Data.Vector.Unboxed as Vec
-import           Data.Vector.Unboxed (Vector)
+import qualified Data.Vector.Generic as Vec
+import qualified Data.Vector         as BVec
+import qualified Data.Vector.Unboxed as UVec
 
 import Grid
 
 data Tree = Tree 
   { grid :: Grid
-  , whiteM :: [Tree]
-  , blackM :: [Tree]
+  , whiteM :: BVec.Vector Tree
+  , blackM :: BVec.Vector Tree
   }
 
 posInf :: Double
@@ -28,36 +28,14 @@ posInf = 1 / 0
 negInf :: Double
 negInf = - posInf
 
--- paths :: Coord -> Grid -> [[(Int, Color)]]
--- paths c g = [path c d g | d <- dirs]
-
-
--- goodPath :: Color -> [(Int, Color)] -> Set Int
--- goodPath c [_] = Set.empty
--- goodPath c [_, _] = Set.empty
--- goodPath c (this:next:rest) =
---   if snd next == other c
---      && sandwich
---   then Set.fromList $ map fst (this:next:toFlip)
---   else Set.empty
---   where
---     (toFlip, tail) = span (\x -> snd x == other c) rest
---     sandwich = Just c == (fmap (snd . fst) . List.uncons $ tail)
-
--- goodPos :: Coord -> Color -> Grid -> Set Int
--- goodPos coord color g =
---   foldr (Set.union . goodPath color) Set.empty (paths coord g)
-
-moves :: Grid -> Color -> [Grid]
-moves g c =
-  let a = S.filter (\s -> isJust $ runIdentity $ S.head_ s) . S.map (\x -> toChange c g x) $ emptyTiles g
-      good =  S.map (Vec.fromList . S.fst' . runIdentity . S.toList . S.map (\i -> (i, c))) a
-      grids = S.fst' . runIdentity . S.toList $ S.map (\v -> Vec.update g v) good
+moves :: Grid -> Color -> BVec.Vector Grid
+moves g col =
+  let good = Vec.filter (check col g) $ emptyTiles g
+      grids = Vec.map (change col g) good
   in grids
 
 isTerminal :: Tree -> Bool
-isTerminal (Tree _ [] []) = True
-isTerminal _              = False
+isTerminal (Tree _ w b) = Vec.null w && Vec.null b
 
 hasMoves :: Color -> Tree -> Bool
 hasMoves c (Tree _ wm bm) = if c == white
@@ -87,9 +65,6 @@ evalMobility g =
     then fromIntegral w / fromIntegral (w + b) + 1/2
     else negate $ fromIntegral b / fromIntegral (b + w) + 1 / 2
 
--- evalCorners :: Grid -> Double
--- evalCorners g = fromIntegral (sum $ map (g Vec.!) [ 0, 7, 56, 63]) / 4
-
 evalFrontier :: Grid -> Double
 evalFrontier g = 
   let (b, w) = count . Vec.imap (\c v -> if hasEmptyNeighbour g $ fromLin c then v else 0) $ g
@@ -118,7 +93,7 @@ evalCorners g = let
 
 eval' = eval (Vec.fromListN 3 [502.78, 19.59, 431.02])
 
-eval :: Vector Double -> Grid -> Double
+eval :: UVec.Vector Double -> Grid -> Double
 eval w g = -- evalCorners g + evalPositions g + evalPosession g
     (w Vec.! 0) * evalPositions g
   + (w Vec.! 1) * evalPosession g
@@ -135,17 +110,3 @@ upperLeft =
 weights =
   let y = map (\x -> x ++ reverse x) upperLeft
   in Vec.fromList $ concat $ y ++ reverse y
-
-  -- weights = Map.fromList $
---      upperLeft 
---   ++ map (\(C x y, w) -> (C (7 - x) y, w)) upperLeft
---   ++ map (\(C x y, w) -> (C x (7 - y), w)) upperLeft
---   ++ map (\(C x y, w) -> (C y x, w)) upperLeft
-
--- eval :: Color -> Grid -> Double
--- eval c g = 
---   sum $ [fromMaybe 0.0 $ Map.lookup (C x y) weights |
---           x <- [0..7]
---         , y <- [0..7]
---         , Map.lookup (C x y) g == Just c
---         ]

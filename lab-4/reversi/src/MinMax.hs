@@ -19,14 +19,15 @@ import Data.Maybe
 import Data.Function
 import Data.Foldable
 import Data.Vector.Instances
-import Data.Vector.Unboxed (Vector)
+import qualified Data.Vector.Generic as Vec
+import qualified Data.Vector.Unboxed as UVec
 
 data Mode = Timed Int | Iter Int | Fixed Int
 
 data Ctx = Ctx
   { mode :: Mode
   , doSort :: Bool
-  , hParam :: Vector Double
+  , hParam :: UVec.Vector Double
   }
 
 -- showCtx :: Ctx -> IO ()
@@ -78,7 +79,7 @@ negamax ctx depth c alpha beta tree
               else aux alpha' beta ns
       -- aux alpha beta negInf gs
       -- children <- aux alpha beta sorted
-      value <- aux alpha beta sorted
+      value <- aux alpha beta (Vec.toList sorted)
       -- let s = fromIntegral color * value
       -- putStrLn $ "depth: " ++ show depth ++ " value: " ++ show value
       return $ value -- Node color s grid children 

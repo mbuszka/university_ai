@@ -30,6 +30,10 @@ executables:
     - -rtsopts
     - -with-rtsopts=-N
     - -O2
+    - -fspecialise-aggressively
+    - -fexpose-all-unfoldings
+    - -funfolding-use-threshold=64
+    - -optc-O3
     dependencies:
     - reversi
 

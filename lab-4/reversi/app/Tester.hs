@@ -19,11 +19,15 @@ import           Data.Vector.Unboxed (Vector)
 -- randomVsRandom :: Grid -> IO Grid
 -- randomVsRandom g = oneGame g (play white) (play black)
 
-oneTurn :: (Tree -> IO Tree) -> (Tree -> IO Tree) -> Tree -> IO Tree
+oneTurn :: (Tree -> IO Tree) -> (Tree -> IO Tree) -> Tree -> IO (Maybe Tree)
 oneTurn w b t = do
-  t' <- if hasMoves white t
-    then w t else return t
-  if hasMoves black t' then b t' else return t'
+  (m, t') <- if hasMoves white t
+    then (,) True <$> w t else return (False, t)
+  if hasMoves black t' 
+    then Just <$> b t' 
+    else if m 
+    then return (Just t')
+    else return Nothing
 
 -- kTurns :: Int -> Grid -> (Color -> Ply -> IO Grid) -> (Color -> Ply -> IO Grid) -> IO (Maybe Grid)
 -- kTurns 0 g _ _ = return $ Just g
@@ -45,9 +49,11 @@ oneTurn w b t = do
 oneGame :: Grid -> (Tree -> IO Tree) -> (Tree -> IO Tree) -> IO Grid
 oneGame init w b = loop (gameTree init)
   where
-    loop t = if isTerminal t
-      then return $ grid t
-      else oneTurn w b t >>= loop
+    loop t = do
+      mt <- oneTurn w b t
+      case mt of
+        Just t' -> loop t'
+        Nothing -> return $ grid t
       
 result :: [Double] -> Int
 result = length . filter (>0)

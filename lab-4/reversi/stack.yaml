@@ -38,8 +38,8 @@ resolver: lts-11.5
 packages:
 - .
 
-nix:
-  enable: true
+# nix:
+#   enable: true
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
 # extra-deps: []
