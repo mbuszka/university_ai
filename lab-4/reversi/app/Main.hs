@@ -1,24 +1,41 @@
 module Main where
 
-import qualified Data.Vector.Unboxed as Vec
 import System.Environment
+import Options.Applicative
+import Data.Semigroup ((<>))
+
 import Tester
 import MinMax
+import Reversi
+
+data AppMode = Bench | Test Ctx | Play 
+
+modeP :: Parser Mode
+modeP = (Timed <$> option auto (long "timed" <> short 't' <> metavar "TIME" <> help "Each decision will use up to TIME ms"))
+  <|> (Iter <$> option auto (long "iter" <> short 'i' <> metavar "N" <> help "Each decision will run N progressively deeper iterations"))
+  <|> (Fixed <$> option auto (long "fixed" <> short 'f' <> metavar "N" <> help "Each decision will reach depth up to N"))
+  <|> (pure $ Fixed 2)
+
+ctxP :: Parser Ctx
+ctxP = Ctx <$> modeP <*> pure False <*> pure eval'
+
+appP :: Parser AppMode
+appP = subparser 
+  (  command "bench" (info (pure Bench) (progDesc "benchmark engine, by playing random games"))
+  <> command "test" (info (Test <$> ctxP) (fullDesc <> progDesc "test the agents, by playing against random opponent"))
+  <> command "play" (info (pure Play) (progDesc "play in the tournament"))
+  )
 
 main :: IO ()
 main = do
-  comStr:modStr:numStr:t <- getArgs
-  let n = read numStr
-  let 
-    mode = case modStr of
-      "iter" -> Iter n
-      "time" -> Timed n
-      "fixed" -> Fixed n
-    doSort = null t
-    ctx = Ctx mode doSort (Vec.fromListN 3 [502.78, 19.59, 431.02])
-  case comStr of
-    "test" -> test ctx
-    -- "train" -> runTraining ctx
-
+  mode <- execParser opts
+  case mode of
+    Bench -> bench
+    Test c -> test c
+    Play -> return ()
+  where
+    opts = info (appP <**> helper)
+      ( fullDesc
+      <> header "reversi - game engine and some actors" )
       
   -- trains 1000 (Vec.replicate 64 0)

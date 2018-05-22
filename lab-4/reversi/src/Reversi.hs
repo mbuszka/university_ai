@@ -1,25 +1,15 @@
 module Reversi where
 
-import Data.Functor.Identity
-import           Data.Int
-import qualified Data.List as List
-import qualified Data.List.NonEmpty as NL
-import           Data.List.NonEmpty (NonEmpty(..))
-import qualified Data.Map as Map
-import           Data.Map (Map)
-import           Data.Maybe as Maybe
-import qualified Data.Set as Set
-import           Data.Set (Set)
 import qualified Data.Vector.Generic as Vec
 import qualified Data.Vector         as BVec
 import qualified Data.Vector.Unboxed as UVec
 
-import Grid
+import Engine
 
 data Tree = Tree 
   { grid :: Grid
-  , whiteM :: BVec.Vector Tree
-  , blackM :: BVec.Vector Tree
+  , whiteM :: BVec.Vector (Coord, Tree)
+  , blackM :: BVec.Vector (Coord, Tree)
   }
 
 posInf :: Double
@@ -27,12 +17,6 @@ posInf = 1 / 0
 
 negInf :: Double
 negInf = - posInf
-
-moves :: Grid -> Color -> BVec.Vector Grid
-moves g col =
-  let good = Vec.filter (check col g) $ emptyTiles g
-      grids = Vec.map (change col g) good
-  in grids
 
 isTerminal :: Tree -> Bool
 isTerminal (Tree _ w b) = Vec.null w && Vec.null b
@@ -43,7 +27,7 @@ hasMoves c (Tree _ wm bm) = if c == white
   else not $ null bm
 
 gameTree :: Grid -> Tree
-gameTree start = Tree start (gameTree <$> moves start white) (gameTree <$> moves start black)
+gameTree start = Tree start (fmap (\(c, t) -> (c, gameTree t)) $ moves start white) (fmap (\(c, t) -> (c, gameTree t)) $ moves start black)
 
 evalPosession :: Grid -> Double
 evalPosession g =
@@ -92,12 +76,12 @@ evalCorners g = let
   in fromIntegral $ sum $ map f ix
 
 eval' = eval (Vec.fromListN 3 [502.78, 19.59, 431.02])
-
-eval :: UVec.Vector Double -> Grid -> Double
-eval w g = -- evalCorners g + evalPositions g + evalPosession g
-    (w Vec.! 0) * evalPositions g
-  + (w Vec.! 1) * evalPosession g
-  + (w Vec.! 2) * evalFrontier g
+        where
+          eval :: UVec.Vector Double -> Grid -> Double
+          eval w g = -- evalCorners g + evalPositions g + evalPosession g
+              (w Vec.! 0) * evalPositions g
+            + (w Vec.! 1) * evalPosession g
+            -- + (w Vec.! 2) * evalFrontier g
 
 upperLeft :: [[Double]]
 upperLeft =
@@ -110,3 +94,22 @@ upperLeft =
 weights =
   let y = map (\x -> x ++ reverse x) upperLeft
   in Vec.fromList $ concat $ y ++ reverse y
+
+oneTurn :: (Tree -> IO Tree) -> (Tree -> IO Tree) -> Tree -> IO (Maybe Tree)
+oneTurn w b t = do
+  (m, t') <- if hasMoves white t
+    then (,) True <$> w t else return (False, t)
+  if hasMoves black t' 
+    then Just <$> b t' 
+    else if m 
+    then return (Just t')
+    else return Nothing
+
+oneGame :: Grid -> (Tree -> IO Tree) -> (Tree -> IO Tree) -> IO Grid
+oneGame init w b = loop (gameTree init)
+  where
+    loop t = do
+      mt <- oneTurn w b t
+      case mt of
+        Just t' -> loop t'
+        Nothing -> return $ grid t

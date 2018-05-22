@@ -1,27 +1,30 @@
--- {-# LANGUAGE StandaloneDeriving #-}
--- {-# LANGUAGE FlexibleInstances #-}
-module Grid where
+module Engine 
+  ( Grid (..)
+  , Color (..)
+  , Coord (..)
+  , Dir (..)
+  , moves
+  , black
+  , white
+  , empty
+  , other
+  , count
+  , hasEmptyNeighbour
+  , initial
+  , toLin, fromLin
+  ) where
 
-import           Data.Functor.Identity
-import           Data.STRef
 import           Control.Monad
 import           Control.Monad.ST
-import qualified Data.Array as Arr
-import           Data.Array (Ix, Array)
-import qualified Data.Map as Map
-import           Data.Map (Map)
-import           Data.Maybe
 import           Data.Int
-import qualified Data.Vector.Unboxed as UVec
+import qualified Data.Vector.Unboxed         as UVec
 import qualified Data.Vector.Unboxed.Mutable as MVec
-import qualified Data.Vector as BVec
-import qualified Data.Vector.Generic as Vec
+import qualified Data.Vector                 as BVec
+import qualified Data.Vector.Generic         as Vec
 
 type Color = Int8
 type Coord = (Int, Int)
 type Grid = UVec.Vector Color
-
--- instance Hashable (Vector Color)
 
 data Dir = N | NE | E | SE | S | SW | W | NW
   deriving (Enum, Eq, Ord, Show)
@@ -148,6 +151,12 @@ emptyTiles = Vec.map fromLin . Vec.convert . Vec.elemIndices 0
 {-# INLINE changeTiles #-}
 changeTiles :: Grid -> Color -> UVec.Vector Int -> Grid
 changeTiles g c is = Vec.update g (Vec.map (\i -> (i, c)) is)
+
+moves :: Grid -> Color -> BVec.Vector (Coord, Grid)
+moves g col =
+  let good = Vec.filter (check col g) $ emptyTiles g
+      grids = Vec.map (\c -> (c, change col g c)) good
+  in grids
 
 initial :: Grid
 initial = Vec.generate 64 (f . fromLin) where
