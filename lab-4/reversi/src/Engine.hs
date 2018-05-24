@@ -4,6 +4,8 @@ module Engine
   , Coord (..)
   , Dir (..)
   , moves
+  , hasMove
+  , change
   , black
   , white
   , empty
@@ -24,7 +26,7 @@ import qualified Data.Vector.Generic         as Vec
 
 type Color = Int8
 type Coord = (Int, Int)
-type Grid = UVec.Vector Color
+type Grid  = UVec.Vector Color
 
 data Dir = N | NE | E | SE | S | SW | W | NW
   deriving (Enum, Eq, Ord, Show)
@@ -149,14 +151,16 @@ emptyTiles :: Grid -> BVec.Vector Coord
 emptyTiles = Vec.map fromLin . Vec.convert . Vec.elemIndices 0
 
 {-# INLINE changeTiles #-}
-changeTiles :: Grid -> Color -> UVec.Vector Int -> Grid
-changeTiles g c is = Vec.update g (Vec.map (\i -> (i, c)) is)
+changeTiles :: Color -> Grid -> UVec.Vector Int -> Grid
+changeTiles color grid is = Vec.update grid (Vec.map (\i -> (i, color)) is)
 
-moves :: Grid -> Color -> BVec.Vector (Coord, Grid)
-moves g col =
-  let good = Vec.filter (check col g) $ emptyTiles g
-      grids = Vec.map (\c -> (c, change col g c)) good
-  in grids
+{-# INLINEABLE moves #-}
+moves :: Color -> Grid -> BVec.Vector Coord
+moves color grid = Vec.filter (check color grid) $ emptyTiles grid
+
+{-# INLINEABLE hasMove #-}
+hasMove :: Color -> Grid -> Bool
+hasMove color grid = Vec.any (check color grid) $ emptyTiles grid
 
 initial :: Grid
 initial = Vec.generate 64 (f . fromLin) where

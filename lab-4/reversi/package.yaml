@@ -9,6 +9,7 @@ dependencies:
 - base >= 4.7 && < 5
 - containers
 - optparse-applicative
+- hashtables
 - random
 - stm
 - vector

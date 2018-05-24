@@ -6,28 +6,14 @@ import qualified Data.Vector.Unboxed as UVec
 
 import Engine
 
-data Tree = Tree 
-  { grid :: Grid
-  , whiteM :: BVec.Vector (Coord, Tree)
-  , blackM :: BVec.Vector (Coord, Tree)
-  }
+type Agent = Grid -> IO Coord
+type Players = Color -> Agent
 
 posInf :: Double
 posInf = 1 / 0
 
 negInf :: Double
 negInf = - posInf
-
-isTerminal :: Tree -> Bool
-isTerminal (Tree _ w b) = Vec.null w && Vec.null b
-
-hasMoves :: Color -> Tree -> Bool
-hasMoves c (Tree _ wm bm) = if c == white
-  then not $ null wm
-  else not $ null bm
-
-gameTree :: Grid -> Tree
-gameTree start = Tree start (fmap (\(c, t) -> (c, gameTree t)) $ moves start white) (fmap (\(c, t) -> (c, gameTree t)) $ moves start black)
 
 evalPosession :: Grid -> Double
 evalPosession g =
@@ -43,8 +29,8 @@ evalPositions g =
 
 evalMobility :: Grid -> Double
 evalMobility g =
-  let w = length $ moves g white
-      b = length $ moves g black
+  let w = length $ moves white g
+      b = length $ moves black g
   in if b < w 
     then fromIntegral w / fromIntegral (w + b) + 1/2
     else negate $ fromIntegral b / fromIntegral (b + w) + 1 / 2
@@ -63,17 +49,21 @@ finalScore g = let (b, w) = count g
     EQ -> 0
     GT -> negInf
 
-evalCorners :: Grid -> Double
-evalCorners g = let
-  ix = [ (0, [1, 8])
-       , (7, [6, 15])
-       , (56, [48, 57])
-       , (63, [62, 55])
-       ]
-  f (c, [a, b]) = if g Vec.! c == 0 
-    then 2 * (g Vec.! a) + 2 * (g Vec.! b)
-    else 10 * (g Vec.! c)
-  in fromIntegral $ sum $ map f ix
+data Stat = Stat
+  { whiteWon :: Int
+  , blackWon :: Int
+  , gamesTot :: Int
+  } deriving (Eq, Ord, Show)
+
+instance Monoid Stat where
+  mappend (Stat a b c) (Stat a' b' c') = Stat (a + a') (b + b') (c + c')
+  mempty = Stat 0 0 0
+
+winner :: Grid -> Stat
+winner g = case uncurry compare $ count g of
+  LT -> Stat 1 0 1
+  EQ -> Stat 0 0 1
+  GT -> Stat 0 1 1
 
 eval' = eval (Vec.fromListN 3 [502.78, 19.59, 431.02])
         where
@@ -95,21 +85,21 @@ weights =
   let y = map (\x -> x ++ reverse x) upperLeft
   in Vec.fromList $ concat $ y ++ reverse y
 
-oneTurn :: (Tree -> IO Tree) -> (Tree -> IO Tree) -> Tree -> IO (Maybe Tree)
-oneTurn w b t = do
-  (m, t') <- if hasMoves white t
-    then (,) True <$> w t else return (False, t)
-  if hasMoves black t' 
-    then Just <$> b t' 
-    else if m 
-    then return (Just t')
-    else return Nothing
+turn :: Color -> Players -> Grid -> IO (Maybe Grid)
+turn c p grid = do
+  (m, grid') <- if hasMove c grid
+    then (,) True . change c grid <$> p c grid else return (False, grid)
+  if hasMove (other c) grid'
+    then Just . change (other c) grid' <$> p (other c) grid'
+    else if m
+      then return (Just grid')
+      else return Nothing
 
-oneGame :: Grid -> (Tree -> IO Tree) -> (Tree -> IO Tree) -> IO Grid
-oneGame init w b = loop (gameTree init)
+game :: Color -> Players -> Grid -> IO Grid
+game c p init = loop init
   where
     loop t = do
-      mt <- oneTurn w b t
+      mt <- turn c p t
       case mt of
         Just t' -> loop t'
-        Nothing -> return $ grid t
+        Nothing -> return t
