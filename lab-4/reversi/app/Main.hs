@@ -7,6 +7,7 @@ import Data.Semigroup ((<>))
 import Tester
 import MinMax
 import Reversi
+import Player
 
 data AppMode = Bench | Test Ctx | Play 
 
@@ -14,7 +15,7 @@ modeP :: Parser Mode
 modeP = (Timed <$> option auto (long "timed" <> short 't' <> metavar "TIME" <> help "Each decision will use up to TIME ms"))
   -- <|> (Iter <$> option auto (long "iter" <> short 'i' <> metavar "N" <> help "Each decision will run N progressively deeper iterations"))
   <|> (Fixed <$> option auto (long "fixed" <> short 'f' <> metavar "N" <> help "Each decision will reach depth up to N"))
-  <|> (pure $ Fixed 2)
+  <|> (pure $ Timed 500)
 
 ctxP :: Parser Ctx
 ctxP = Ctx <$> modeP <*> pure False <*> pure eval'
@@ -32,7 +33,7 @@ main = do
   case mode of
     Bench -> bench
     Test c -> test c
-    Play -> return ()
+    Play -> player
   where
     opts = info (appP <**> helper)
       ( fullDesc

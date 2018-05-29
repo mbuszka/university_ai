@@ -1,4 +1,6 @@
-module MCTS where
+module MCTS 
+  ( mctsAgent
+  ) where
 
 import Engine (Grid, moves, hasMove, change)
 import Reversi 
@@ -136,14 +138,15 @@ loop n var t = do
   atomically $ writeTVar var t'
   loop (n + k) var t'
 
-mctsAgent :: Int8 -> Agent
-mctsAgent col grid = do
+mctsAgent :: Double -> Int8 -> Agent
+mctsAgent secs col grid = do
   let c = fromReversi col
   let t = Leaf c mempty grid
   var <- atomically $ newTVar t
-  putStrLn "searching"
-  timeout 500000 (loop 0 var t)
-  putStrLn "timed out"
+  -- putStrLn "searching"
+  let tm = floor $ secs * 1000000 - 10000
+  timeout tm (loop 0 var t)
+  -- putStrLn "timed out"
   Node _ cs <- atomically $ readTVar var
   let cts = Vec.zip (moves col grid) (Vec.fromList cs)
       val (_, t) = let s = stat t in fromIntegral (gamesTot s)

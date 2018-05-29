@@ -14,6 +14,8 @@ dependencies:
 - stm
 - vector
 - vector-instances
+- attoparsec
+- text
 
 library:
   source-dirs: src

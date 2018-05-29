@@ -18,7 +18,7 @@ bench = do
 
 test :: Ctx -> IO ()
 test ctx = do
-  let players = \c -> if c == white then mctsAgent white else search ctx black
+  let players = \c -> if c == white then mctsAgent 0.5 white else search ctx black
   scores <- replicateM 5 (evalPosession <$> game white players initial)
   scores2 <- replicateM 5 (evalPosession <$> game black players initial)
   print $ result scores
