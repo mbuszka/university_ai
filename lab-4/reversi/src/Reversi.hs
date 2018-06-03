@@ -1,4 +1,15 @@
-module Reversi where
+module Reversi
+  ( Agent(..)
+  , Player(..)
+  , Stat(..)
+  , winner
+  , turn
+  , game
+  , eval'
+  , negInf
+  , posInf
+  , finalScore
+  ) where
 
 import qualified Data.Vector.Generic as Vec
 import qualified Data.Vector         as BVec
@@ -6,8 +17,8 @@ import qualified Data.Vector.Unboxed as UVec
 
 import Engine
 
-type Agent = Grid -> IO Coord
-type Players = Color -> Agent
+type Agent = Color -> Grid -> IO Coord
+type Player = Double -> Agent
 
 posInf :: Double
 posInf = 1 / 0
@@ -85,17 +96,18 @@ weights =
   let y = map (\x -> x ++ reverse x) upperLeft
   in Vec.fromList $ concat $ y ++ reverse y
 
-turn :: Color -> Players -> Grid -> IO (Maybe Grid)
+turn :: Color -> Agent -> Grid -> IO (Maybe Grid)
 turn c p grid = do
   (m, grid') <- if hasMove c grid
-    then (,) True . change c grid <$> p c grid else return (False, grid)
+    then (,) True . change c grid <$> p c grid
+    else return (False, grid)
   if hasMove (other c) grid'
     then Just . change (other c) grid' <$> p (other c) grid'
     else if m
       then return (Just grid')
       else return Nothing
 
-game :: Color -> Players -> Grid -> IO Grid
+game :: Color -> Agent -> Grid -> IO Grid
 game c p init = loop init
   where
     loop t = do

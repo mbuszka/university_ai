@@ -15,8 +15,6 @@ import Engine
 import MinMax
 import MCTS
 
-data Algo = MinMax | MCTS
-
 data Command = HeDid Double Double Coord | UGo Double Double | OneMore | Bye
   deriving (Show)
 
@@ -36,21 +34,21 @@ getCommand = do
       exitFailure
     Right c -> return c
 
-player :: IO ()
-player = do
+player :: Player -> IO ()
+player p = do
   putStrLn "RDY"
   hFlush stdout
   c <- getCommand
   case c of
-    HeDid t _ c -> loop white 1 (change black initial c)
-    UGo t _ -> loop black 1 initial
+    HeDid t _ c -> loop p white 1 (change black initial c)
+    UGo t _ -> loop p black 1 initial
     Bye -> exitSuccess
-  player
+  player p
 
-loop :: Color -> Double -> Grid -> IO ()
-loop col t g = do
+loop :: Player -> Color -> Double -> Grid -> IO ()
+loop p col t g = do
   g' <- if hasMove col g then do
-    m <- mctsAgent t col g
+    m <- p t col g
     putStrLn $ "IDO " ++ show (fst m) ++ " " ++ show (snd m)
     return $ change col g m
   else do
@@ -59,7 +57,7 @@ loop col t g = do
   hFlush stdout
   c <- getCommand
   case c of
-    HeDid t _ (-1, -1) -> loop col 1 g'
-    HeDid t _ coord -> loop col 1 (change (other col) g' coord)
-    OneMore -> player
+    HeDid t _ (-1, -1) -> loop p col 1 g'
+    HeDid t _ coord -> loop p col 1 (change (other col) g' coord)
+    OneMore -> player p
     Bye -> exitSuccess

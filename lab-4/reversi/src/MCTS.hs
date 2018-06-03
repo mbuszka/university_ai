@@ -6,7 +6,6 @@ import Engine (Grid, moves, hasMove, change)
 import Reversi 
 import RandomPlayer
 
-
 import Control.Concurrent.STM
 import Control.Concurrent.STM.TVar
 import Data.Function
@@ -138,7 +137,7 @@ loop n var t = do
   atomically $ writeTVar var t'
   loop (n + k) var t'
 
-mctsAgent :: Double -> Int8 -> Agent
+mctsAgent :: Player
 mctsAgent secs col grid = do
   let c = fromReversi col
   let t = Leaf c mempty grid
