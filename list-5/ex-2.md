@@ -1,0 +1,2 @@
+- Q learning
+- idea feedbacku dla algorytmu (pani w sekretariacie) na podstawie oceny uczniów
