@@ -13,6 +13,7 @@ import Data.Int
 import Data.Maybe
 import Data.Monoid ((<>))
 import System.Timeout
+import System.IO
 
 import qualified Data.Vector as Vec
 
@@ -145,8 +146,8 @@ mctsAgent secs col grid = do
   -- putStrLn "searching"
   let tm = floor $ secs * 1000000 - 10000
   timeout tm (loop 0 var t)
-  -- putStrLn "timed out"
-  Node _ cs <- atomically $ readTVar var
+  Node s cs <- atomically $ readTVar var
+  hPutStrLn stderr $ "Root scores: " ++ show s
   let cts = Vec.zip (moves col grid) (Vec.fromList cs)
       val (_, t) = let s = stat t in fromIntegral (gamesTot s)
       best = fst $ Vec.maximumBy (compare `on` val) cts
